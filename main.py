@@ -3,6 +3,7 @@ import json
 import discord
 from discord.ext import commands
 from youtubesearchpython import VideosSearch
+from dotenv import load_dotenv
 import youtube_dl
 import asyncio
 import os
@@ -14,8 +15,9 @@ FFMPEG_OPTIONS = {
 }
 YDL_OPTIONS = {"format": "bestaudio"}
 
-TOKEN = os.environ['TOKEN']
-PREFIX = os.environ['PREFIX']
+load_dotenv()
+TOKEN = os.getenv("TOKEN")
+PREFIX = os.getenv("PREFIX")
 LIMIT = 5
 QUEUE = []
 client = commands.Bot(command_prefix=PREFIX)
@@ -24,8 +26,7 @@ client.remove_command('help')
 @client.event
 async def on_ready():
     print('Bot Online:{0.user}'.format(client))
-    await client.change_presence(activity=discord.Activity(
-        type=discord.ActivityType.listening, name="everyone"))
+    await client.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="everyone"))
 
 
 async def checkQueue(ctx):
@@ -35,9 +36,8 @@ async def checkQueue(ctx):
         voice_client = ctx.voice_client
         info = ydl.extract_info(QUEUE[0][1], download=False)
         url2 = info["formats"][0]["url"]
-        source = await discord.FFmpegOpusAudio.from_probe(
-            url2, **FFMPEG_OPTIONS)
-        voice_client.play(source)
+        source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+        voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
 
 
 @client.command(name="ping")
@@ -72,8 +72,7 @@ async def play(ctx, *args):
     if args[0].startswith("https://www.youtube.com/watch?v="):
         searchQuery = VideosSearch(args[0], limit=1)
         songName = searchQuery.result()["result"][0]["title"]
-        songLink = "https://www.youtube.com/watch?v=" + searchQuery.result(
-        )["result"][0]["id"]
+        songLink = "https://www.youtube.com/watch?v=" + searchQuery.result()["result"][0]["id"]
         voice_client = ctx.voice_client
         QUEUE.append([songName, args[0]])
         if ctx.voice_client.is_playing():
@@ -82,22 +81,17 @@ async def play(ctx, *args):
             with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
                 info = ydl.extract_info(QUEUE[0][1], download=False)
                 url2 = info["formats"][0]["url"]
-                source = await discord.FFmpegOpusAudio.from_probe(
-                    url2, **FFMPEG_OPTIONS)
-                voice_client.play(
-                    source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
-                embed = discord.Embed(color=0xffff00)
-                embed.add_field(name=f"Added to queue: {songName}",
-                                value=songLink,
-                                inline=False)
+                source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+                voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+                embed = discord.Embed(color=0xff0000)
+                embed.add_field(name=f"Added to queue: {songName}", value=songLink, inline=False)
                 await ctx.send(embed=embed)
 
     else:
         searchQueryArgs = " ".join(args)
         searchQuery = VideosSearch(searchQueryArgs, limit=1)
         songName = searchQuery.result()["result"][0]["title"]
-        songLink = "https://www.youtube.com/watch?v=" + searchQuery.result(
-        )["result"][0]["id"]
+        songLink = "https://www.youtube.com/watch?v=" + searchQuery.result()["result"][0]["id"]
         voice_client = ctx.voice_client
         QUEUE.append([songName, songLink])
         if ctx.voice_client.is_playing():
@@ -106,25 +100,21 @@ async def play(ctx, *args):
             with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
                 info = ydl.extract_info(QUEUE[0][1], download=False)
                 url2 = info["formats"][0]["url"]
-                source = await discord.FFmpegOpusAudio.from_probe(
-                    url2, **FFMPEG_OPTIONS)
-                voice_client.play(source)
-                embed = discord.Embed(color=0xffff00)
-                embed.add_field(name=f"Added to queue: {songName}",
-                                value=songLink,
-                                inline=False)
+                source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+                voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+                embed = discord.Embed(color=0xff0000)
+                embed.add_field(name=f"Added to queue: {songName}", value=songLink, inline=False)
                 await ctx.send(embed=embed)
 
 
 @client.command(aliases=["q", "Q", "QUEUE"])
 async def queue(ctx):
     if len(QUEUE) == 0:
-        await ctx.send(
-            "It doesn't look like there is a queue right now. Try **~play** to add some beats to the queue :headphones:"
-        )
-    embed = discord.Embed(color=0xffff00)
-    for i in range(len(QUEUE)):
-        embed.add_field(name=QUEUE[i][0], value=QUEUE[i][1], inline=False)
+        await ctx.send("It doesn't look like there is a queue right now. Try **~play** to add some beats to the queue :headphones:")
+    else:
+        for i in range(len(QUEUE)):
+            embed = discord.Embed(color=0xff0000)
+            embed.add_field(name=QUEUE[i][0], value=QUEUE[i][1], inline=False)    
     await ctx.send(embed=embed)
 
 
@@ -132,30 +122,18 @@ async def queue(ctx):
 async def clearqueue(ctx):
     for i in QUEUE:
         QUEUE.pop()
-    ctx.voice_client.stop()
 
 
 @client.command(aliases=["fs", "FS", "s", "S", "SKIP"])
 async def skip(ctx):
-    try:
-        QUEUE.pop(0)
-    except:
-        pass
-
+    QUEUE.pop(0)
     voice_client = ctx.voice_client
     if len(QUEUE) != 0:
-        FFMPEG_OPTIONS = {
-            "before_options":
-            "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-            "options": "-vn"
-        }
-        YDL_OPTIONS = {"format": "bestaudio"}
         ctx.voice_client.stop()
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
             info = ydl.extract_info(QUEUE[0][1], download=False)
             url2 = info["formats"][0]["url"]
-            source = await discord.FFmpegOpusAudio.from_probe(
-                url2, **FFMPEG_OPTIONS)
+            source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
             voice_client.play(source)
     else:
         voice_client = ctx.voice_client
@@ -193,11 +171,9 @@ async def join(ctx):
         with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
             info = ydl.extract_info(QUEUE[0][1], download=False)
             url2 = info["formats"][0]["url"]
-            source = await discord.FFmpegOpusAudio.from_probe(
-                url2, **FFMPEG_OPTIONS)
+            source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
             voice_client = ctx.voice_client
-            voice_client.play(
-                source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+            voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
 
 
 client.run(TOKEN)
