@@ -14,8 +14,8 @@ FFMPEG_OPTIONS = {
 }
 YDL_OPTIONS = {"format": "bestaudio"}
 
-TOKEN = "ODk4Njc5MjY4Nzg2MTgwMTk2.YWnuSg.E3kwOXGsk92Y8mDqrLWVUTnYsyE"
-PREFIX = "~"
+TOKEN = os.environ['TOKEN']
+PREFIX = os.environ['PREFIX']
 LIMIT = 5
 QUEUE = []
 client = commands.Bot(command_prefix=PREFIX)
