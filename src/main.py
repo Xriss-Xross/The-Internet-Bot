@@ -1,13 +1,18 @@
 
 #---------------------------------------------------------------#
 #--------------{This code belongs to Xriss_Xross}---------------#
+#---------------------------------------------------------------#
+#--------{If you for whatever reason use any of my code}--------#
+#----------------------{remember it's MIT}----------------------#
+#---------------------------------------------------------------#
 #---{Some of this code was developed with the help of Prlxx}----#
-#-----------------{Do not plagarise this code}------------------#
+#---------------{Try not to blantantly plagarise}---------------#
 #---------------------------------------------------------------#
 
 import json
 import random
 import discord
+from pytube import Playlist
 from discord.ext import commands
 from youtubesearchpython import VideosSearch
 from dotenv import load_dotenv
@@ -28,26 +33,15 @@ with open("src\quotes.json") as json_file:
 
 TOKEN = os.getenv("TOKEN")
 PREFIX = os.getenv("PREFIX")
-LIMIT = 5
-QUEUE = []
 client = commands.Bot(command_prefix=PREFIX)
 client.remove_command('help')
+
+#-------------------------{BOT_BASICS}--------------------------#
 
 @client.event
 async def on_ready():
     print('Bot Online:{0.user}'.format(client))
     await client.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="everyone"))
-
-
-async def checkQueue(ctx):
-    if QUEUE != []:
-        QUEUE.pop(0)
-    with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-        voice_client = ctx.voice_client
-        info = ydl.extract_info(QUEUE[0][1], download=False)
-        url2 = info["formats"][0]["url"]
-        source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
-        voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
 
 
 @client.command(name="ping")
@@ -58,6 +52,36 @@ async def ping(ctx):
 @client.command(aliases=["HELP", "h", "H"])
 async def help(ctx):
     await ctx.channel.send("No")
+
+#-------------------------{YOUTUBE_BOT}-------------------------#
+
+LIMIT = 5 # how many titles will be searched through the ~search command
+QUEUE = []
+
+async def checkQueue(ctx): # y is passed to determine whether the first song should be skipped or not
+    if QUEUE != []:
+        try:
+            with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+                voice_client = ctx.voice_client
+                info = ydl.extract_info(QUEUE[0][1], download=False)
+                url2 = info["formats"][0]["url"]
+                source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+                voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+                embed = discord.Embed(color=0x22BBBB)
+                embed.add_field(name=f"Now playing: {QUEUE[0][0]} :headphones:", value=f"{QUEUE[0][1]}", inline=False)
+                await ctx.send(embed=embed)
+        except:
+            QUEUE.pop(0)
+            await ctx.send("There was a problem playing that song so the next song is playing.")
+            with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+                voice_client = ctx.voice_client
+                info = ydl.extract_info(QUEUE[0][1], download=False)
+                url2 = info["formats"][0]["url"]
+                source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+                voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+                embed = discord.Embed(color=0x22BBBB)
+                embed.add_field(name=f"Now playing: {QUEUE[0][0]}", value="f{QUEUE[0][1]}", inline=False)
+                await ctx.send(embed=embed)
 
 
 @client.command(aliases=["dc", "fuckoff", "FUCKOFF", "DC", "DISCONNECT"])
@@ -78,60 +102,146 @@ async def play(ctx, *args):
         await channel.connect()
     else:
         await ctx.voice_client.move_to(channel)
+    if args[0] is None:
+        pass
+    elif args[0].startswith("https://www.youtube.com/watch?v="): # specific video
+        try:
+            searchQuery = VideosSearch(args[0], limit=1)
+            songName = searchQuery.result()["result"][0]["title"]
+            songLink = "https://www.youtube.com/watch?v=" + searchQuery.result()["result"][0]["id"]
+            voice_client = ctx.voice_client
+            QUEUE.append([songName, args[0]])
+            if ctx.voice_client.is_playing():
+                pass
+            else:
+                with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+                    info = ydl.extract_info(QUEUE[0][1], download=False)
+                    url2 = info["formats"][0]["url"]
+                    source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+                    voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+                    embed = discord.Embed(color=0x22BBBB)
+                    embed.add_field(name=f"Added to queue: {songName}", value=songLink, inline=False)
+                    await ctx.send(embed=embed)
+        except:
+            await ctx.send("Please make sure your request is a youtube link or an actual title of a youtube video")
+        
+    elif args[0].startswith("https://www.youtube.com/playlist?list="): # playlist queueing
+        try:
+            play_list = Playlist(args[0])
+            voice_client = ctx.voice_client
+            if len(play_list) == 0:
+                await ctx.send("I couldn't find any songs in that playlist or I couldn't find the playlist")
+            else:
+                i = len(QUEUE)
+                for video in play_list.videos:
+                    name = video.title
+                    QUEUE.append([name])
+                for link in play_list:
+                    QUEUE[i].append(link)
+                    i += 1
+                await ctx.send(f"{len(play_list)} songs added to the queue")
+                if ctx.voice_client.is_playing():
+                    pass
+                else:
+                    with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+                        info = ydl.extract_info(QUEUE[0][1], download=False)
+                        url2 = info["formats"][0]["url"]
+                        source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+                        voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+                        embed = discord.Embed(color=0x22BBBB)
+                        embed.add_field(name=f"Now playing: {QUEUE[0][0]} :headphones:", value=songLink, inline=False)
+                        await ctx.send(embed=embed)
+        except:
+            await ctx.send("Please make sure your request is a youtube link")
 
-    if args[0].startswith("https://www.youtube.com/watch?v="):
-        searchQuery = VideosSearch(args[0], limit=1)
-        songName = searchQuery.result()["result"][0]["title"]
-        songLink = "https://www.youtube.com/watch?v=" + searchQuery.result()["result"][0]["id"]
-        voice_client = ctx.voice_client
-        QUEUE.append([songName, args[0]])
-        if ctx.voice_client.is_playing():
-            pass
-        else:
-            with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-                info = ydl.extract_info(QUEUE[0][1], download=False)
-                url2 = info["formats"][0]["url"]
-                source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
-                voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
-                embed = discord.Embed(color=0x22BBBB)
-                embed.add_field(name=f"Added to queue: {songName}", value=songLink, inline=False)
-                await ctx.send(embed=embed)
+    else: # name of the youtube video is given
+        try:
+            searchQueryArgs = " ".join(args)
+            searchQuery = VideosSearch(searchQueryArgs, limit=1)
+            songName = searchQuery.result()["result"][0]["title"]
+            songLink = "https://www.youtube.com/watch?v=" + searchQuery.result()["result"][0]["id"]
+            voice_client = ctx.voice_client
+            QUEUE.append([songName, songLink])
+            if ctx.voice_client.is_playing():
+                pass
+            else:
+                with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+                    info = ydl.extract_info(QUEUE[0][1], download=False)
+                    url2 = info["formats"][0]["url"]
+                    source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+                    voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+                    embed = discord.Embed(color=0x22BBBB)
+                    embed.add_field(name=f"Added to queue: {songName}", value=songLink, inline=False)
+                    await ctx.send(embed=embed)
+        except:
+            await ctx.message.send("Please make sure your request is a youtube link or an actual title of a youtube video")
 
+
+@client.command(aliases=["SEARCH", "SE", "se"])
+async def search(ctx, *args):
+    if ctx.author.voice is None:
+        await ctx.send("You aren't in a voice channel")
     else:
         searchQueryArgs = " ".join(args)
-        searchQuery = VideosSearch(searchQueryArgs, limit=1)
-        songName = searchQuery.result()["result"][0]["title"]
-        songLink = "https://www.youtube.com/watch?v=" + searchQuery.result()["result"][0]["id"]
-        voice_client = ctx.voice_client
-        QUEUE.append([songName, songLink])
-        if ctx.voice_client.is_playing():
-            pass
-        else:
-            with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-                info = ydl.extract_info(QUEUE[0][1], download=False)
-                url2 = info["formats"][0]["url"]
-                source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
-                voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
-                embed = discord.Embed(color=0x22BBBB)
-                embed.add_field(name=f"Added to queue: {songName}", value=songLink, inline=False)
-                await ctx.send(embed=embed)
+        searchQuery = VideosSearch(searchQueryArgs, limit=LIMIT)
+        embed = discord.Embed(color=0x22BBBB)
+        tempQUEUE = []
+        for i in range(5):
+            songName = searchQuery.result()["result"][i]["title"]
+            songLink = "https://www.youtube.com/watch?v=" + searchQuery.result()["result"][i]["id"]
+            embed.add_field(name=f"{i + 1}. {songName}", value=songLink, inline=False)
+            tempQUEUE.append([songName, songLink])
+        await ctx.send(embed=embed)
+        await ctx.send("Which video do you want to queue?")
+        def check(msg):
+            return msg.author == ctx.author and msg.channel == ctx.channel
+        try:
+            msg = await client.wait_for("message", check=check, timeout=30)
+            msgContent = int(msg.content)
+            QUEUE.append(tempQUEUE[msgContent - 1])
+            voice_client = ctx.voice_client
+            channel = ctx.author.voice.channel
+            if ctx.voice_client is None:
+                await channel.connect()
+            else:
+                await ctx.voice_client.move_to(channel)
+            if ctx.voice_client.is_playing():
+                pass
+            else:
+                with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+                    info = ydl.extract_info(QUEUE[0][1], download=False)
+                    url2 = info["formats"][0]["url"]
+                    source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+                    voice_client = ctx.voice_client
+                    voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
+        except Exception as e:
+            print(e)
+            await ctx.send("Please give me a valid option withing 30s next time")
 
-
+    
 @client.command(aliases=["q", "Q", "QUEUE"])
 async def queue(ctx):
     if len(QUEUE) == 0:
         await ctx.send("It doesn't look like there is a queue right now. Try **~play** to add some beats to the queue :headphones:")
     else:
-        for i in range(len(QUEUE)):
-            embed = discord.Embed(color=0x22BBBB)
-            embed.add_field(name=QUEUE[i][0], value=QUEUE[i][1], inline=False)    
+        embed = discord.Embed(color=0x22BBBB)
+        if len(QUEUE) > 9:
+            x = 9
+        else:
+            x = len(QUEUE)
+        for i in range(x):
+            embed.add_field(name=QUEUE[i][0], value=QUEUE[i][1], inline=False)
     await ctx.send(embed=embed)
 
 
-@client.command(aliases=["cq", "CQ", "CLEARQUEUE"])
+@client.command(aliases=["cq", "CQ", "CLEARQUEUE", "clearq", "CLEARQ"])
 async def clearqueue(ctx):
-    for i in QUEUE:
-        QUEUE.pop()
+    if QUEUE != []:
+        for i in QUEUE:
+            QUEUE.pop(i + 1)
+            voice_client = ctx.voice_client
+    else:
+        await ctx.send("There is currently no audio playing in the voice channel")
 
 
 @client.command(aliases=["fs", "FS", "s", "S", "SKIP"])
@@ -156,11 +266,10 @@ async def pause(ctx):
     if voice_client.is_playing():
         voice_client.pause()
     else:
-        await ctx.send(
-            "There is currently no audio playing in the voice channel")
+        await ctx.send("There is currently no audio playing in the voice channel")
 
 
-@client.command(name="resume")
+@client.command(aliases=["re", "RESUME", "RE"])
 async def resume(ctx):
     voice_client = ctx.voice_client
     if voice_client.is_paused():
@@ -169,7 +278,7 @@ async def resume(ctx):
         await ctx.send("There is currently no audio paused")
 
 
-@client.command(aliases=["summon", "SUMMON", "j", "J", "JOIN"])
+@client.command(aliases=["summon", "SUMMON", "j", "J", "JOIN", "connect", "CONNECT"])
 async def join(ctx):
     if ctx.author.voice is None:
         await ctx.send("You aren't in a voice channel")
@@ -185,7 +294,7 @@ async def join(ctx):
             voice_client = ctx.voice_client
             voice_client.play(source, after=lambda x=None: asyncio.run(checkQueue(ctx)))
 
-
+#--------------------------{QUOTEBOOK}--------------------------#
 
 @client.command(aliases=["RANDOMQ", "rq", "RQ"])
 async def randomq(ctx, *args):
